@@ -1,0 +1,9 @@
+CMakeFiles
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+api
+build
+.vscode
+libview_*
+view_*.dll
