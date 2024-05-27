@@ -461,13 +461,7 @@ bool PS4View::Init()
     m_plat = Platform::GetByName("freebsd-x86_64");
     m_arch = Architecture::GetByName("x86_64");
 
-    int64_t imageBaseAdjustment = 0;
-    if (!initialImageBase)
-        imageBaseAdjustment = preferredImageBase;
-    else if (initialImageBase <= preferredImageBase)
-        imageBaseAdjustment = preferredImageBase - initialImageBase;
-    else
-        imageBaseAdjustment = -(int64_t)(initialImageBase - preferredImageBase);
+    int64_t imageBaseAdjustment = 0x400000;
 
     m_entryPoint = m_entryPoint + imageBaseAdjustment;
 
