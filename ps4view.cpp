@@ -2528,7 +2528,6 @@ uint64_t PS4ViewType::ParseHeaders(BinaryView* data, ElfIdent& ident, ElfCommonH
         recognizedPlatform = g_PS4ViewType->RecognizePlatform(altArchId, endianness, data, metadata);
     }
 
-    printf("recognizedPlatform: %s\n", recognizedPlatform);
     if (recognizedPlatform)
     {
         if (plat)
