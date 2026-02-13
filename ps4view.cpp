@@ -452,7 +452,7 @@ bool PS4View::Init()
             initialImageBase = i.virtualAddress;
     }
 
-    SetOriginalBase(initialImageBase);
+    SetOriginalImageBase(initialImageBase);
     uint64_t preferredImageBase = initialImageBase;
     Ref<Settings> viewSettings = Settings::Instance();
     m_extractMangledTypes = viewSettings->Get<bool>("analysis.extractTypesFromMangledNames", this);
@@ -978,7 +978,7 @@ bool PS4View::Init()
         m_logger->LogError("PS4 ELF relocation table invalid");
     }
 
-    BeginBulkModifySymbols();
+    BulkSymbolModification bulkSymbolModification(this);
 
     vector<ElfSymbolTableEntry> auxSymbolTable;
     try
@@ -1166,7 +1166,7 @@ bool PS4View::Init()
     delete m_symbolQueue;
     m_symbolQueue = nullptr;
 
-    EndBulkModifySymbols();
+    bulkSymbolModification.End();
 
     auto relocHandler = m_arch->GetRelocationHandler("ELF");
     if (relocHandler)
@@ -2203,7 +2203,7 @@ void PS4View::DefineElfSymbol(BNSymbolType type, const string& incomingName, uin
 
     if (m_symbolQueue)
     {
-        m_symbolQueue->Append(process, [this](Symbol* symbol, Type* type) {
+        m_symbolQueue->Append(process, [this](Symbol* symbol, const Confidence<Ref<Type>>& type) {
             DefineAutoSymbolAndVariableOrFunction(GetDefaultPlatform(), symbol, type);
         });
     }
