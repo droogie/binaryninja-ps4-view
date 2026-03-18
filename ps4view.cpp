@@ -61,6 +61,7 @@ PS4View::PS4View(BinaryView* data, bool parseOnly): BinaryView("PS4", data->GetF
     memset(&m_auxSymbolTable, 0, sizeof(m_auxSymbolTable));
     memset(&m_sectionStringTable, 0, sizeof(m_sectionStringTable));
     memset(&m_sectionOpd, 0, sizeof(m_sectionOpd));
+    memset(&m_sceDynLibData, 0, sizeof(m_sceDynLibData));
 
     m_logger->LogInfo("Detected %s endian PS4 ELF", m_endian == LittleEndian ? "Little Endian" : "Big Endian");
 
@@ -469,7 +470,7 @@ bool PS4View::Init()
     {
         uint64_t adjustedVirtualAddr = i.virtualAddress + imageBaseAdjustment;
 
-        if (i.type == ELF_PT_LOAD)
+        if (i.type == ELF_PT_LOAD || i.type == PT_SCE_RELRO)
         {
             uint32_t flags = 0;
             if (i.flags & 1)
@@ -478,8 +479,8 @@ bool PS4View::Init()
                 flags |= SegmentWritable;
             if (i.flags & 4)
                 flags |= SegmentReadable;
-            m_logger->LogInfo("adding ELF_PT_LOAD (.text) at 0x%x\n", adjustedVirtualAddr);
-            m_logger->LogInfo("adding ELF_PT_LOAD offset: 0x%x\n", i.offset);
+            m_logger->LogInfo("adding segment type 0x%x at 0x%x\n", i.type, adjustedVirtualAddr);
+            m_logger->LogInfo("adding segment offset: 0x%x\n", i.offset);
             AddAutoSegment(adjustedVirtualAddr, i.memorySize, i.offset, i.fileSize, flags);
         }
 
@@ -694,6 +695,13 @@ bool PS4View::Init()
     // Parse dynamic table
     try
     {
+        // When PT_SCE_DYNLIBDATA exists (user-mode ELFs), DT_SCE_* values are offsets
+        // into the dynlib data segment. When it doesn't (kernels), DT_SCE_* values are
+        // virtual addresses that need imageBaseAdjustment applied.
+        uint64_t sceDynBase = (m_sceDynLibData.fileSize > 0)
+            ? m_sceDynLibData.virtualAddress
+            : (uint64_t)imageBaseAdjustment;
+
         uint64_t adjustedVirtualAddr = m_dynamicTable.offset;
         reader.Seek(adjustedVirtualAddr);
 
@@ -729,7 +737,7 @@ bool PS4View::Init()
             // PS4 Tags
             case DT_SCE_HASH:
                 //m_hashHeader = value;
-                m_hashtable.offset = m_sceDynLibData.virtualAddress + value;
+                m_hashtable.offset = sceDynBase + value;
                 m_logger->LogInfo("DT_SCE_HASH: 0x%x\n", m_hashtable.offset);
                 break;
             case DT_SCE_HASHSZ:
@@ -737,7 +745,7 @@ bool PS4View::Init()
                 m_logger->LogInfo("DT_SCE_HASHSZ: 0x%x\n", m_hashtable.size);
                 break;
             case DT_SCE_STRTAB:
-                m_dynamicStringTable.offset = m_sceDynLibData.virtualAddress + value;
+                m_dynamicStringTable.offset = sceDynBase + value;
                 m_logger->LogInfo("DT_SCE_STRTAB: 0x%x\n", m_dynamicStringTable.offset);
                 break;
             case DT_SCE_STRSZ:
@@ -745,7 +753,7 @@ bool PS4View::Init()
                 m_logger->LogInfo("DT_SCE_STRSZ: 0x%x\n", m_dynamicStringTable.size);
                 break;
             case DT_SCE_SYMTAB:
-                m_auxSymbolTable.offset = m_sceDynLibData.virtualAddress + value;
+                m_auxSymbolTable.offset = sceDynBase + value;
                 m_logger->LogInfo("DT_SCE_SYMTAB: 0x%x\n", m_auxSymbolTable.offset);
                 break;
             case DT_SCE_SYMTABSZ:
@@ -753,7 +761,7 @@ bool PS4View::Init()
                 m_logger->LogInfo("DT_SCE_SYMTABSZ: 0x%x\n", m_auxSymbolTable.size);
                 break;
             case DT_SCE_RELA:
-                reloca.offset = m_sceDynLibData.virtualAddress + value;
+                reloca.offset = sceDynBase + value;
                 m_logger->LogInfo("DT_SCE_RELA: 0x%x\n", reloca.offset);
                 break;
             case DT_SCE_RELASZ:
@@ -773,7 +781,7 @@ bool PS4View::Init()
                 m_logger->LogInfo("DT_SCE_PLTREL: 0x%x\n", pltType);
                 break;
             case DT_SCE_JMPREL:
-                plt.offset = m_sceDynLibData.virtualAddress + value;
+                plt.offset = sceDynBase + value;
                 m_logger->LogInfo("DT_SCE_JMPREL: 0x%x\n", plt.offset);
                 break;
             //
@@ -805,7 +813,7 @@ bool PS4View::Init()
             case ELF_DT_INIT:
             case ELF_DT_FINI:
             {
-                uint64_t target = value;
+                uint64_t target = value + imageBaseAdjustment;
                 string autoName = (tag == ELF_DT_INIT) ? "_init" : "_fini";
                 DefineAutoSymbol(new Symbol(FunctionSymbol, autoName, target, NoBinding));
                 Ref<Platform> targetPlatform = platform->GetAssociatedPlatformByAddress(target);
@@ -849,7 +857,8 @@ bool PS4View::Init()
         m_logger->LogInfo("ELF_DT_NEEDED: Found %d needed libraries\n", neededLibraries.size());
         m_logger->LogInfo("Done parsing the dynamic table...\n");
 
-        m_logger->LogInfo("Module Table: 0x%x\n", m_dynamicStringTable.offset + neededLibraries.back());
+        if (!neededLibraries.empty())
+            m_logger->LogInfo("Module Table: 0x%x\n", m_dynamicStringTable.offset + neededLibraries.back());
 
         vector<Ref<Metadata>> libraries;
         vector<Ref<Metadata>> libraryFound;
