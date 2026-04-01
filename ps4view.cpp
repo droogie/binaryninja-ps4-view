@@ -801,12 +801,14 @@ bool PS4View::Init()
             // case ELF_DT_PLTRELSZ:
             //     plt.size = value;
             //     break;
-            // case ELF_DT_STRTAB: // string table
-            //     m_dynamicStringTable.offset = value + imageBaseAdjustment;
-            //     break;
-            // case ELF_DT_SYMTAB: // symbol table, symbol offsets into string table for the NID
-            //     m_auxSymbolTable.offset = value + imageBaseAdjustment;
-            //     break;
+            case ELF_DT_STRTAB: // string table
+                m_dynamicStringTable.offset = value + imageBaseAdjustment;
+                m_logger->LogInfo("ELF_DT_STRTAB: 0x%x\n", m_dynamicStringTable.offset);
+                break;
+            case ELF_DT_SYMTAB: // symbol table
+                m_auxSymbolTable.offset = value + imageBaseAdjustment;
+                m_logger->LogInfo("ELF_DT_SYMTAB: 0x%x\n", m_auxSymbolTable.offset);
+                break;
             case ELF_DT_SYMENT:
                 m_auxSymbolTableEntrySize = value;
                 break;
@@ -820,9 +822,10 @@ bool PS4View::Init()
                 AddFunctionForAnalysis(targetPlatform, target);
                 break;
             }
-            // case ELF_DT_HASH:
-            //     m_hashHeader = value + imageBaseAdjustment;
-            //     break;
+            case ELF_DT_HASH:
+                m_hashtable.offset = value + imageBaseAdjustment;
+                m_logger->LogInfo("ELF_DT_HASH: 0x%x\n", m_hashtable.offset);
+                break;
             case ELF_DT_GNU_HASH:
                 m_gnuHashHeader = value;
                 break;
@@ -835,9 +838,10 @@ bool PS4View::Init()
             case ELF_DT_RELAENT:
                 reloca.entrySize = value;
                 break;
-            // case ELF_DT_STRSZ:
-            //     m_dynamicStringTable.size = value;
-            //     break;
+            case ELF_DT_STRSZ:
+                m_dynamicStringTable.size = value;
+                m_logger->LogInfo("ELF_DT_STRSZ: 0x%x\n", m_dynamicStringTable.size);
+                break;
             case ELF_DT_REL:
                 rel.offset = value;
                 break;
@@ -987,7 +991,7 @@ bool PS4View::Init()
         m_logger->LogError("PS4 ELF relocation table invalid");
     }
 
-    BulkSymbolModification bulkSymbolModification(this);
+    BulkSymbolModification bulkMod(this);
 
     vector<ElfSymbolTableEntry> auxSymbolTable;
     try
@@ -1175,7 +1179,7 @@ bool PS4View::Init()
     delete m_symbolQueue;
     m_symbolQueue = nullptr;
 
-    bulkSymbolModification.End();
+    bulkMod.End();
 
     auto relocHandler = m_arch->GetRelocationHandler("ELF");
     if (relocHandler)
